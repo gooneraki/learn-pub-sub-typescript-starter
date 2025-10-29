@@ -4,7 +4,10 @@
   "scripts": {
     "server": "npx tsx src/server/index.ts",
     "client": "npx tsx src/client/index.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "rabbit:start": "./src/scripts/rabbit.sh start",
+    "rabbit:stop": "./src/scripts/rabbit.sh stop",
+    "rabbit:logs": "./src/scripts/rabbit.sh logs"
   },
   "dependencies": {
     "amqplib": "^0.10.8"
