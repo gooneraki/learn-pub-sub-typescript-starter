@@ -1,7 +1,6 @@
 import amqp from "amqplib";
-import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
-import type { PlayingState } from "../internal/gamelogic/gamestate.js";
 import { publishJSON } from "../internal/pubsub/pubsub.js";
+import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
 import { getInput, printServerHelp } from "../internal/gamelogic/gamelogic.js";
 
 async function main() {
@@ -9,54 +8,52 @@ async function main() {
   const conn = await amqp.connect(rabbitConnString);
   console.log("Peril game server connected to RabbitMQ!");
 
-  const channel = await conn.createConfirmChannel();
-  console.log("Confirm channel created.");
+  ["SIGINT", "SIGTERM"].forEach((signal) =>
+    process.on(signal, async () => {
+      try {
+        await conn.close();
+        console.log("RabbitMQ connection closed.");
+      } catch (err) {
+        console.error("Error closing RabbitMQ connection:", err);
+      } finally {
+        process.exit(0);
+      }
+    })
+  );
+
+  const publishCh = await conn.createConfirmChannel();
 
   printServerHelp();
 
   while (true) {
-    const [command, ...args] = await getInput();
+    const words = await getInput();
+    if (words.length === 0) continue;
 
-    if (!command) {
-      continue;
-    }
-
-    switch (command) {
-      case "pause":
-        console.log("Sending pause message");
-        await publishJSON(channel, ExchangePerilDirect, PauseKey, {
+    const command = words[0];
+    if (command === "pause") {
+      console.log("Publishing paused game state");
+      try {
+        await publishJSON(publishCh, ExchangePerilDirect, PauseKey, {
           isPaused: true,
-        } as PlayingState);
-        continue;
-
-      case "resume":
-        console.log("Sending resume message");
-        await publishJSON(channel, ExchangePerilDirect, PauseKey, {
+        });
+      } catch (err) {
+        console.error("Error publishing pause message:", err);
+      }
+    } else if (command === "resume") {
+      console.log("Publishing resumed game state");
+      try {
+        await publishJSON(publishCh, ExchangePerilDirect, PauseKey, {
           isPaused: false,
-        } as PlayingState);
-        continue;
-
-      case "exit":
-        console.log("Exiting");
-        break;
-
-      default:
-        console.log(`Dont understand command ${command}`);
-        break;
+        });
+      } catch (err) {
+        console.error("Error publishing resume message:", err);
+      }
+    } else if (command === "quit") {
+      console.log("Goodbye!");
+      process.exit(0);
+    } else {
+      console.log("Unknown command");
     }
-
-    ["SIGINT", "SIGTERM"].forEach((signal) =>
-      process.on(signal, async () => {
-        try {
-          await conn.close();
-          console.log("RabbitMQ connection closed.");
-        } catch (err) {
-          console.error("Error closing RabbitMQ connection:", err);
-        } finally {
-          process.exit(0);
-        }
-      })
-    );
   }
 }
 
