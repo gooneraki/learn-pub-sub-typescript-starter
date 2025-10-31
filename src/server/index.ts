@@ -2,6 +2,7 @@ import amqp from "amqplib";
 import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
 import type { PlayingState } from "../internal/gamelogic/gamestate.js";
 import { publishJSON } from "../internal/pubsub/pubsub.js";
+import { getInput, printServerHelp } from "../internal/gamelogic/gamelogic.js";
 
 async function main() {
   const rabbitConnString = "amqp://guest:guest@localhost:5672/";
@@ -11,22 +12,52 @@ async function main() {
   const channel = await conn.createConfirmChannel();
   console.log("Confirm channel created.");
 
-  const koko: PlayingState = { isPaused: true };
+  printServerHelp();
 
-  await publishJSON(channel, ExchangePerilDirect, PauseKey, koko);
+  while (true) {
+    const [command, ...args] = await getInput();
 
-  ["SIGINT", "SIGTERM"].forEach((signal) =>
-    process.on(signal, async () => {
-      try {
-        await conn.close();
-        console.log("RabbitMQ connection closed.");
-      } catch (err) {
-        console.error("Error closing RabbitMQ connection:", err);
-      } finally {
-        process.exit(0);
-      }
-    })
-  );
+    if (!command) {
+      continue;
+    }
+
+    switch (command) {
+      case "pause":
+        console.log("Sending pause message");
+        await publishJSON(channel, ExchangePerilDirect, PauseKey, {
+          isPaused: true,
+        } as PlayingState);
+        continue;
+
+      case "resume":
+        console.log("Sending resume message");
+        await publishJSON(channel, ExchangePerilDirect, PauseKey, {
+          isPaused: false,
+        } as PlayingState);
+        continue;
+
+      case "exit":
+        console.log("Exiting");
+        break;
+
+      default:
+        console.log(`Dont understand command ${command}`);
+        break;
+    }
+
+    ["SIGINT", "SIGTERM"].forEach((signal) =>
+      process.on(signal, async () => {
+        try {
+          await conn.close();
+          console.log("RabbitMQ connection closed.");
+        } catch (err) {
+          console.error("Error closing RabbitMQ connection:", err);
+        } finally {
+          process.exit(0);
+        }
+      })
+    );
+  }
 }
 
 main().catch((err) => {
