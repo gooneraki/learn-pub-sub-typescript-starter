@@ -6,9 +6,12 @@ import {
   printClientHelp,
   printQuit,
 } from "../internal/gamelogic/gamelogic.js";
-import { declareAndBind } from "../internal/pubsub/pubsub.js";
+import { SimpleQueueType, subscribeJSON } from "../internal/pubsub/pubsub.js";
 import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
-import { GameState } from "../internal/gamelogic/gamestate.js";
+import {
+  GameState,
+  type PlayingState,
+} from "../internal/gamelogic/gamestate.js";
 import { commandMove } from "../internal/gamelogic/move.js";
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
 
@@ -22,19 +25,16 @@ async function main() {
 
   const username = await clientWelcome();
 
-  // Declare and bind a transient queue for receiving pause messages
-  const [channel, queue] = await declareAndBind(
+  const gs = new GameState(username);
+
+  await subscribeJSON(
     conn,
     ExchangePerilDirect,
     `${PauseKey}.${username}`,
     PauseKey,
-    "TRANSIENT"
+    SimpleQueueType.TRANSIENT,
+    handlerPause(gs)
   );
-  console.log(
-    `Queue ${queue.queue} declared and bound to ${ExchangePerilDirect} exchange`
-  );
-
-  const gs = new GameState(username);
 
   while (true) {
     const words = await getInput();
@@ -74,3 +74,20 @@ main().catch((err) => {
   console.error("Fatal error:", err);
   process.exit(1);
 });
+
+function handlerPause(gs: GameState): (ps: PlayingState) => void {
+  return function (ps: PlayingState) {
+    if (ps.isPaused) {
+      console.log();
+      console.log("==== Pause Detected ====");
+      gs.pauseGame();
+      console.log("------------------------");
+    } else {
+      console.log();
+      console.log("==== Resume Detected ====");
+      gs.resumeGame();
+      console.log("------------------------");
+    }
+    console.log("> ");
+  };
+}

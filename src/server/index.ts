@@ -1,5 +1,9 @@
 import amqp from "amqplib";
-import { declareAndBind, publishJSON } from "../internal/pubsub/pubsub.js";
+import {
+  declareAndBind,
+  publishJSON,
+  SimpleQueueType,
+} from "../internal/pubsub/pubsub.js";
 import {
   ExchangePerilDirect,
   ExchangePerilTopic,
@@ -18,7 +22,7 @@ async function main() {
     ExchangePerilTopic,
     GameLogSlug,
     `${GameLogSlug}.*`,
-    "DURABLE"
+    SimpleQueueType.DURABLE
   );
   console.log(
     `Queue ${queue.queue} declared and bound to ${ExchangePerilTopic} exchange`
