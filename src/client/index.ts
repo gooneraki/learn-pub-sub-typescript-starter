@@ -7,6 +7,7 @@ import {
   printQuit,
 } from "../internal/gamelogic/gamelogic.js";
 import {
+  AckType,
   publishJSON,
   SimpleQueueType,
   subscribeJSON,
@@ -21,9 +22,14 @@ import {
   GameState,
   type PlayingState,
 } from "../internal/gamelogic/gamestate.js";
-import { commandMove, handleMove } from "../internal/gamelogic/move.js";
+import {
+  commandMove,
+  handleMove,
+  MoveOutcome,
+} from "../internal/gamelogic/move.js";
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import type { ArmyMove } from "../internal/gamelogic/gamedata.js";
+import { handlePause } from "../internal/gamelogic/pause.js";
 
 async function main() {
   console.log("Starting Peril client...");
@@ -102,27 +108,21 @@ main().catch((err) => {
   process.exit(1);
 });
 
-function handlerPause(gs: GameState): (ps: PlayingState) => void {
-  return function (ps: PlayingState) {
-    if (ps.isPaused) {
-      console.log();
-      console.log("==== Pause Detected ====");
-      gs.pauseGame();
-      console.log("------------------------");
-    } else {
-      console.log();
-      console.log("==== Resume Detected ====");
-      gs.resumeGame();
-      console.log("------------------------");
-    }
-    console.log("> ");
+export function handlerPause(gs: GameState): (ps: PlayingState) => AckType {
+  return (ps: PlayingState): AckType => {
+    handlePause(gs, ps);
+    process.stdout.write("> ");
+    return AckType.Ack;
   };
 }
 
-function handlerMove(gs: GameState): (move: ArmyMove) => void {
+function handlerMove(gs: GameState): (move: ArmyMove) => AckType {
   return function (move: ArmyMove) {
-    handleMove(gs, move);
+    const outcome = handleMove(gs, move);
     console.log(`Moved ${move.units.length} units to ${move.toLocation}`);
     process.stdout.write("> ");
+    return outcome === MoveOutcome.Safe || outcome === MoveOutcome.MakeWar
+      ? AckType.Ack
+      : AckType.NackDiscard;
   };
 }

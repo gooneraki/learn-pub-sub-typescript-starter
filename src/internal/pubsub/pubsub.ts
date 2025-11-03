@@ -4,6 +4,11 @@ export enum SimpleQueueType {
   "DURABLE",
   "TRANSIENT",
 }
+export enum AckType {
+  "Ack",
+  "NackRequeue",
+  "NackDiscard",
+}
 
 export async function publishJSON<T>(
   ch: ConfirmChannel,
@@ -46,8 +51,8 @@ export async function subscribeJSON<T>(
   exchange: string,
   queueName: string,
   key: string,
-  queueType: SimpleQueueType, // an enum to represent "durable" or "transient"
-  handler: (data: T) => void
+  queueType: SimpleQueueType,
+  handler: (data: T) => AckType
 ): Promise<void> {
   const [channel, queue] = await declareAndBind(
     conn,
@@ -61,8 +66,26 @@ export async function subscribeJSON<T>(
     if (!msg) return;
     const parsedData = JSON.parse(msg.content.toString());
 
-    handler(parsedData);
+    const ackResult = handler(parsedData);
 
-    channel.ack(msg);
+    switch (ackResult) {
+      case AckType.Ack:
+        channel.ack(msg);
+        console.log("Message Acknowledged");
+        return;
+
+      case AckType.NackDiscard:
+        channel.nack(msg, false, false);
+        console.log("Message discarded");
+        return;
+
+      case AckType.NackRequeue:
+        channel.nack(msg, false, true);
+        console.log("Message requeued");
+        return;
+
+      default:
+        throw new Error(`Unknown acktype ${ackResult}`);
+    }
   });
 }
