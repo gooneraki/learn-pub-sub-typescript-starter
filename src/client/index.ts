@@ -6,14 +6,24 @@ import {
   printClientHelp,
   printQuit,
 } from "../internal/gamelogic/gamelogic.js";
-import { SimpleQueueType, subscribeJSON } from "../internal/pubsub/pubsub.js";
-import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
+import {
+  publishJSON,
+  SimpleQueueType,
+  subscribeJSON,
+} from "../internal/pubsub/pubsub.js";
+import {
+  ArmyMovesPrefix,
+  ExchangePerilDirect,
+  ExchangePerilTopic,
+  PauseKey,
+} from "../internal/routing/routing.js";
 import {
   GameState,
   type PlayingState,
 } from "../internal/gamelogic/gamestate.js";
-import { commandMove } from "../internal/gamelogic/move.js";
+import { commandMove, handleMove } from "../internal/gamelogic/move.js";
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
+import type { ArmyMove } from "../internal/gamelogic/gamedata.js";
 
 async function main() {
   console.log("Starting Peril client...");
@@ -24,6 +34,8 @@ async function main() {
   console.log("Peril game client connected to RabbitMQ!");
 
   const username = await clientWelcome();
+
+  const publishCh = await conn.createConfirmChannel();
 
   const gs = new GameState(username);
 
@@ -36,6 +48,15 @@ async function main() {
     handlerPause(gs)
   );
 
+  await subscribeJSON(
+    conn,
+    ExchangePerilTopic,
+    `${ArmyMovesPrefix}.${username}`,
+    `${ArmyMovesPrefix}.*`,
+    SimpleQueueType.TRANSIENT,
+    handlerMove(gs)
+  );
+
   while (true) {
     const words = await getInput();
     if (words.length === 0) {
@@ -44,7 +65,13 @@ async function main() {
     const command = words[0];
     if (command === "move") {
       try {
-        commandMove(gs, words);
+        const move = commandMove(gs, words);
+        await publishJSON(
+          publishCh,
+          ExchangePerilTopic,
+          `${ArmyMovesPrefix}.${username}`,
+          move
+        );
       } catch (err) {
         console.log((err as Error).message);
       }
@@ -89,5 +116,13 @@ function handlerPause(gs: GameState): (ps: PlayingState) => void {
       console.log("------------------------");
     }
     console.log("> ");
+  };
+}
+
+function handlerMove(gs: GameState): (move: ArmyMove) => void {
+  return function (move: ArmyMove) {
+    handleMove(gs, move);
+    console.log(`Moved ${move.units.length} units to ${move.toLocation}`);
+    process.stdout.write("> ");
   };
 }
