@@ -9,6 +9,7 @@ import {
 import {
   AckType,
   publishJSON,
+  publishMsgPack,
   SimpleQueueType,
   subscribeJSON,
 } from "../internal/pubsub/pubsub.js";
@@ -16,6 +17,7 @@ import {
   ArmyMovesPrefix,
   ExchangePerilDirect,
   ExchangePerilTopic,
+  GameLogSlug,
   PauseKey,
   WarRecognitionsPrefix,
 } from "../internal/routing/routing.js";
@@ -35,6 +37,7 @@ import type {
 } from "../internal/gamelogic/gamedata.js";
 import { handlePause } from "../internal/gamelogic/pause.js";
 import { handleWar, WarOutcome } from "../internal/gamelogic/war.js";
+import type { GameLog } from "../internal/gamelogic/logs.js";
 
 async function main() {
   console.log("Starting Peril client...");
@@ -74,7 +77,7 @@ async function main() {
     "war",
     `${WarRecognitionsPrefix}.*`,
     SimpleQueueType.DURABLE,
-    handlerWar(gs)
+    handlerWar(gs, publishCh, username)
   );
 
   while (true) {
@@ -163,8 +166,12 @@ function handlerMove(
   };
 }
 
-function handlerWar(gs: GameState): (rw: RecognitionOfWar) => AckType {
-  return function (rw: RecognitionOfWar): AckType {
+function handlerWar(
+  gs: GameState,
+  publishCh: ConfirmChannel,
+  username: string
+): (rw: RecognitionOfWar) => Promise<AckType> {
+  return async function (rw: RecognitionOfWar): Promise<AckType> {
     const warResolution = handleWar(gs, rw);
 
     switch (warResolution.result) {
@@ -175,7 +182,20 @@ function handlerWar(gs: GameState): (rw: RecognitionOfWar) => AckType {
 
       case WarOutcome.OpponentWon:
       case WarOutcome.YouWon:
+        await publishGameLog(
+          publishCh,
+          username,
+          `${warResolution.winner} won a war against ${warResolution.loser}`
+        );
+        process.stdout.write("> ");
+        return AckType.Ack;
+
       case WarOutcome.Draw:
+        await publishGameLog(
+          publishCh,
+          username,
+          `A war between ${warResolution.attacker} and ${warResolution.defender} resulted in a draw`
+        );
         process.stdout.write("> ");
         return AckType.Ack;
 
@@ -185,4 +205,23 @@ function handlerWar(gs: GameState): (rw: RecognitionOfWar) => AckType {
         return AckType.NackDiscard;
     }
   };
+}
+
+async function publishGameLog(
+  channel: ConfirmChannel,
+  username: string,
+  message: string
+) {
+  const gameLog: GameLog = {
+    username,
+    message,
+    currentTime: new Date(),
+  };
+
+  await publishMsgPack(
+    channel,
+    ExchangePerilTopic,
+    `${GameLogSlug}.${username}`,
+    gameLog
+  );
 }
