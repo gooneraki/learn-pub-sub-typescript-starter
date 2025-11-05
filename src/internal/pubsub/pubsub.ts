@@ -1,4 +1,5 @@
 import type { ConfirmChannel, ChannelModel, Channel, Replies } from "amqplib";
+import { encode } from "@msgpack/msgpack";
 
 export enum SimpleQueueType {
   "DURABLE",
@@ -91,4 +92,27 @@ export async function subscribeJSON<T>(
         throw new Error(`Unknown acktype ${ackResult}`);
     }
   });
+}
+
+export async function publishMsgPack<T>(
+  ch: ConfirmChannel,
+  exchange: string,
+  routingKey: string,
+  value: T
+): Promise<void> {
+  try {
+    const encoded = encode(value);
+
+    const buffer = Buffer.from(encoded);
+
+    await ch.publish(exchange, routingKey, buffer, {
+      contentType: "application/x-msgpack",
+    });
+  } catch (err) {
+    throw new Error(
+      `Something went wrong publishing msgpack: '${
+        err instanceof Error ? err.message : JSON.stringify(err)
+      }'`
+    );
+  }
 }
