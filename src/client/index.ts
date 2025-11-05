@@ -11,7 +11,6 @@ import {
   publishJSON,
   publishMsgPack,
   SimpleQueueType,
-  subscribeJSON,
 } from "../internal/pubsub/pubsub.js";
 import {
   ArmyMovesPrefix,
@@ -38,6 +37,7 @@ import type {
 import { handlePause } from "../internal/gamelogic/pause.js";
 import { handleWar, WarOutcome } from "../internal/gamelogic/war.js";
 import type { GameLog } from "../internal/gamelogic/logs.js";
+import { subscribeJSON } from "../internal/pubsub/consume.js";
 
 async function main() {
   console.log("Starting Peril client...");

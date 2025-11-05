@@ -50,50 +50,6 @@ export async function declareAndBind(
   return [channel, queue];
 }
 
-export async function subscribeJSON<T>(
-  conn: ChannelModel,
-  exchange: string,
-  queueName: string,
-  key: string,
-  queueType: SimpleQueueType,
-  handler: (data: T) => Promise<AckType> | AckType
-): Promise<void> {
-  const [channel, queue] = await declareAndBind(
-    conn,
-    exchange,
-    queueName,
-    key,
-    queueType
-  );
-
-  await channel.consume(queueName, async (msg) => {
-    if (!msg) return;
-    const parsedData = JSON.parse(msg.content.toString());
-
-    const ackResult = await handler(parsedData);
-
-    switch (ackResult) {
-      case AckType.Ack:
-        channel.ack(msg);
-        console.log("Message Acknowledged");
-        return;
-
-      case AckType.NackDiscard:
-        channel.nack(msg, false, false);
-        console.log("Message discarded");
-        return;
-
-      case AckType.NackRequeue:
-        channel.nack(msg, false, true);
-        console.log("Message requeued");
-        return;
-
-      default:
-        throw new Error(`Unknown acktype ${ackResult}`);
-    }
-  });
-}
-
 export async function publishMsgPack<T>(
   ch: ConfirmChannel,
   exchange: string,
