@@ -57,6 +57,8 @@ export async function subscribe<T>(
     simpleQueueType
   );
 
+  await channel.prefetch(1);
+
   await channel.consume(queueName, async (msg) => {
     if (!msg) return;
     const parsedData = unmarshaller(msg.content);
